@@ -24,12 +24,12 @@ if [ -S "$DOCKER_SOCK" ]; then
   echo "$CONTAINERS_TO_STOP_TOTAL containers marked to be stopped during backup"
 
   # Services to stop
-  TEMPFILE2="$(mktemp)"
-  docker service ls --format "{{.ID}}" --filter "label=docker-volume-backup.stop-during-backup=true" > "$TEMPFILE2"
-  SERVICES_TO_STOP="$(cat $TEMPFILE2 | tr '\n' ' ')"
-  SERVICES_TO_STOP_TOTAL="$(cat $TEMPFILE2 | wc -l)"
+  TEMPFILE="$(mktemp)"
+  docker service ls --format "{{.ID}}" --filter "label=docker-volume-backup.stop-during-backup=true" > "$TEMPFILE"
+  SERVICES_TO_STOP="$(cat $TEMPFILE | tr '\n' ' ')"
+  SERVICES_TO_STOP_TOTAL="$(cat $TEMPFILE | wc -l)"
   SERVICES_TOTAL="$(docker service ls --format "{{.ID}}" | wc -l)"
-  rm "$TEMPFILE2"
+  rm "$TEMPFILE"
   echo "$SERVICES_TOTAL services running on host in total"
   echo "$SERVICES_TO_STOP_TOTAL services marked to be stopped during backup"
 
@@ -112,6 +112,18 @@ if [ ! -z "$AWS_S3_BUCKET_NAME" ]; then
   TIME_UPLOADED="$(date +%s.%N)"
 fi
 
+TIME_SMB_UPLOAD="0"
+TIME_SMB_UPLOADED="0"
+if [ ! -z "$SMB_SHARE" ]; then
+  info "Uploading backup to SAMBA share"
+  echo "Will upload to smb share \"$SMB_SHARE\""
+  TIME_SMB_UPLOAD="$(date +%s.%N)"
+  # smbclient "//$SMB_SHARE -A "/run/secrets/$SMB_SECRET" -c "put $BACKUP_FILENAME"
+  curl --upload-file "$BACKUP_FILENAME" -u "$(< /run/secrets/$SMB_SECRET)" "smb://$SMB_SHARE"
+  echo "Upload finished"
+  TIME_SMB_UPLOADED="$(date +%s.%N)"
+fi
+
 if [ -d "$BACKUP_ARCHIVE" ]; then
   info "Archiving backup"
   mv -v "$BACKUP_FILENAME" "$BACKUP_ARCHIVE/$BACKUP_FILENAME"
@@ -134,6 +146,7 @@ INFLUX_LINE="$INFLUXDB_MEASUREMENT\
 ,time_total=$(perl -E "say $TIME_FINISH - $TIME_START - $BACKUP_WAIT_SECONDS")\
 ,time_compress=$(perl -E "say $TIME_BACKED_UP - $TIME_BACK_UP")\
 ,time_upload=$(perl -E "say $TIME_UPLOADED - $TIME_UPLOAD")\
+,time_smb_upload=$(perl -E "say $TIME_SMB_UPLOADED - $TIME_SMB_UPLOAD")\
 "
 echo "$INFLUX_LINE" | sed 's/ /,/g' | tr , '\n'
 

@@ -66,6 +66,47 @@ volumes:
 
 This configuration will back up to AWS S3 instead. See below for additional tips about [S3 Bucket setup](#s3-bucket-setup).
 
+### Backing up to SAMBA share
+
+Off-site backups are better, though:
+
+```yml
+version: "3.7"
+
+services:
+
+  dashboard:
+    image: grafana/grafana:5.3.4
+    volumes:
+      - grafana-data:/var/lib/grafana           # This is where Grafana keeps its data
+
+  backup:
+    image: futurice/docker-volume-backup:2.0.0
+    environment:
+      SMB_SHARE: "nube1/gartorware_storage/"
+      SMB_SECRET: "smb_secret"
+    secrets:
+      - smb_secret
+    volumes:
+      - grafana-data:/backup/grafana-data:ro    # Mount the Grafana data volume (as read-only)
+
+volumes:
+  grafana-data:
+
+secrets:
+  smb_secret:
+    external: true
+```
+
+This configuration will back up to a SAMBA share instead. 
+Do not forget the trailing slash in SMB_SHARE env.
+The authentication is done via _curl -u_ , so a proper user and password string is required:
+```
+myWorkgroup\myUsername:myPassword
+```
+This string must be passed through docker secrets, so the secret must already exist or be defined in the top-level secrets configuration of the stack file, or stack deployment fails.
+[See compose file reference](https://docs.docker.com/compose/compose-file/#secrets).
+
 ### Stopping containers while backing up
 
 It's not generally safe to read files to which other processes might be writing. You may end up with corrupted copies.

@@ -1,0 +1,34 @@
+version: "3.7"
+
+services:
+
+  dashboard:
+    image: grafana/grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  volumes_backup:
+    #build: ../..
+    image: gartorware/docker-volume-backup
+    environment:
+      BACKUP_CRON_EXPRESSION: "* * * * *"
+      SMB_SHARE: "192.168.1.131/share"
+      SMB_SECRET: "smb_secret"
+    volumes:
+      - grafana-data:/backup/grafana-data:ro
+    secrets:
+      - smb_secret
+
+volumes:
+  grafana-data:
+
+secrets:
+  smb_secret:
+    external: true
