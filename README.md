@@ -70,7 +70,10 @@ This configuration will back up to AWS S3 instead. See below for additional tips
 
 It's not generally safe to read files to which other processes might be writing. You may end up with corrupted copies.
 
-You can give the backup container access to the Docker socket, and label any containers that need to be stopped while the backup runs:
+
+You can use the label `"docker-volume-backup.stop-during-backup=true"` to stop containers and/or services during backup.
+
+If you are running **docker-compose or plain docker (not swarm)**, you can give the backup container access to the Docker socket, and label any containers that need to be stopped while the backup runs:
 
 ```yml
 version: "3"
@@ -99,7 +102,42 @@ volumes:
   grafana-data:
 ```
 
+If you are running **docker stack or docker swarm**, you can give the backup container access to the Docker socket, and label any containers that need to be stopped while the backup runs (note this time labels is inside _deploy_ section):
+
+```yml
+version: "3"
+
+services:
+
+  dashboard-as-service:
+    image: grafana/grafana:5.3.4
+    volumes:
+      - grafana-data:/var/lib/grafana           # This is where Grafana keeps its data
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      labels:
+        # Adding this label means this service should be stopped while it's being backed up:
+        - "docker-volume-backup.stop-during-backup=true"
+
+  backup:
+    image: futurice/docker-volume-backup:2.0.0
+    environment:
+      AWS_S3_BUCKET_NAME: my-backup-bucket      # S3 bucket which you own, and already exists
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}   # Read AWS secrets from environment (or a .env file)
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro # Allow use of the "stop-during-backup" feature
+      - grafana-data:/backup/grafana-data:ro    # Mount the Grafana data volume (as read-only)
+
+volumes:
+  grafana-data:
+```
+
 This configuration allows you to safely back up things like databases, if you can tolerate a bit of downtime.
+**Only replicated (NOT global) services are supported right now**
 
 ### Pre/post backup exec
 
@@ -137,6 +175,8 @@ The above configuration will perform a `docker exec` for the database container 
 Similarly, after the temp volume has been backed up, it's cleaned up with another `docker exec` in the database container, this time just invoking `rm`.
 
 If you need a more complex script for pre/post exec, consider mounting and invoking a shell script instead.
+
+**Only plain docker containers (not swarm) has support for pre/post exec**
 
 ## Configuration
 

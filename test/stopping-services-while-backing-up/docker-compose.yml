@@ -1,0 +1,32 @@
+version: "3"
+
+services:
+
+  dashboard:
+    image: grafana/grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      labels:
+        # Adding this label means this service should be stopped while it's being backed up:
+        - "docker-volume-backup.stop-during-backup=true"
+
+  backup:
+    #build: ../..
+    image: gartorware/docker-volume-backup
+    environment:
+      BACKUP_CRON_EXPRESSION: "* * * * *"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - grafana-data:/backup/grafana-data:ro
+      - backups:/archive
+
+volumes:
+  grafana-data:
+  backups:

@@ -13,6 +13,7 @@ info "Backup starting"
 TIME_START="$(date +%s.%N)"
 DOCKER_SOCK="/var/run/docker.sock"
 if [ -S "$DOCKER_SOCK" ]; then
+  # Containers to stop
   TEMPFILE="$(mktemp)"
   docker ps --format "{{.ID}}" --filter "label=docker-volume-backup.stop-during-backup=true" > "$TEMPFILE"
   CONTAINERS_TO_STOP="$(cat $TEMPFILE | tr '\n' ' ')"
@@ -21,6 +22,17 @@ if [ -S "$DOCKER_SOCK" ]; then
   rm "$TEMPFILE"
   echo "$CONTAINERS_TOTAL containers running on host in total"
   echo "$CONTAINERS_TO_STOP_TOTAL containers marked to be stopped during backup"
+
+  # Services to stop
+  TEMPFILE2="$(mktemp)"
+  docker service ls --format "{{.ID}}" --filter "label=docker-volume-backup.stop-during-backup=true" > "$TEMPFILE2"
+  SERVICES_TO_STOP="$(cat $TEMPFILE2 | tr '\n' ' ')"
+  SERVICES_TO_STOP_TOTAL="$(cat $TEMPFILE2 | wc -l)"
+  SERVICES_TOTAL="$(docker service ls --format "{{.ID}}" | wc -l)"
+  rm "$TEMPFILE2"
+  echo "$SERVICES_TOTAL services running on host in total"
+  echo "$SERVICES_TO_STOP_TOTAL services marked to be stopped during backup"
+
 else
   CONTAINERS_TO_STOP_TOTAL="0"
   CONTAINERS_TOTAL="0"
@@ -30,6 +42,14 @@ fi
 if [ "$CONTAINERS_TO_STOP_TOTAL" != "0" ]; then
   info "Stopping containers"
   docker stop $CONTAINERS_TO_STOP
+fi
+
+if [ "$SERVICES_TO_STOP_TOTAL" != "0" ]; then
+  info "Stopping services"
+  for SERVICE in ${SERVICES_TO_STOP[@]}
+  do
+    docker service update --replicas 0 $SERVICE
+  done
 fi
 
 if [ -S "$DOCKER_SOCK" ]; then
@@ -67,6 +87,14 @@ fi
 if [ "$CONTAINERS_TO_STOP_TOTAL" != "0" ]; then
   info "Starting containers back up"
   docker start $CONTAINERS_TO_STOP
+fi
+
+if [ "$SERVICES_TO_STOP_TOTAL" != "0" ]; then
+  info "Starting services back up"
+  for SERVICE in ${SERVICES_TO_STOP[@]}
+  do
+    docker service update --replicas 1 $SERVICE
+  done
 fi
 
 info "Waiting before processing"
