@@ -228,15 +228,16 @@ First step is to have a backup file available. So if a backup file is not availa
 
 To stop containers/services during the restore be sure to include the label `"docker-volume-backup.stop-during-restore=true"` to containers and/or services. This label is similar to the `docker-volume-backup.stop-during-backup` (note the last word) and surely you want to include both of them at once. 
 
-
 The restore procedure can be launched then with:
 `/root/restore.sh <path_to_backup_file> <target_path> [components_to_strip]`
 Where
 Argument | Default | Notes
 --- | --- | ---
 path_to_backup_file | - | Required
-target_path | - | Required
+target_path | - | Required. **DO NOT INCLUDE A TRAILING SLASH**
 components_to_strip | 0 | Number of directories to strip from the backup file
+
+Use absolute paths to avoid mess.
 
 This script will untar the backup file into `target_path` **stripping** the firsts _components_to_strip_ directories. 
 
