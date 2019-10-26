@@ -4,10 +4,11 @@ Docker image for performing simple backups of Docker volumes. Main features:
 
 - Mount volumes into the container, and they'll get backed up
 - Use full `cron` expressions for scheduling the backups
-- Backs up to local disk, [AWS S3](https://aws.amazon.com/s3/), or both
-- Optionally stops containers for the duration of the backup, and starts them again afterward, to ensure consistent backups
+- Backs up to local disk, [AWS S3](https://aws.amazon.com/s3/), SAMBA share, or all of them
+- Optionally stops containers and services for the duration of the backup, and starts them again afterward, to ensure consistent backups
 - Optionally `docker exec`s commands before/after backing up a container, to allow easy integration with database backup tools, for example
 - Optionally ships backup metrics to [InfluxDB](https://docs.influxdata.com/influxdb/), for monitoring
+- A restoration script is available as well.
 
 ## Examples
 
@@ -218,6 +219,31 @@ Similarly, after the temp volume has been backed up, it's cleaned up with anothe
 If you need a more complex script for pre/post exec, consider mounting and invoking a shell script instead.
 
 **Only plain docker containers (not swarm) has support for pre/post exec**
+
+### Restoring a backup
+
+This is a manual procedure. 
+
+First step is to have a backup file available. So if a backup file is not available locally (ie, `$BACKUP_ARCHIVE` is not a volume) you may need to user a `docker cp command` to upload the file to the container.
+
+To stop containers/services during the restore be sure to include the label `"docker-volume-backup.stop-during-restore=true"` to containers and/or services. This label is similar to the `docker-volume-backup.stop-during-backup` (note the last word) and surely you want to include both of them at once. 
+
+
+The restore procedure can be launched then with:
+`/root/restore.sh <path_to_backup_file> <target_path> [components_to_strip]`
+Where
+Argument | Default | Notes
+--- | --- | ---
+path_to_backup_file | - | Required
+target_path | - | Required
+components_to_strip | 0 | Number of directories to strip from the backup file
+
+This script will untar the backup file into `target_path` **stripping** the firsts _components_to_strip_ directories. 
+
+For example, if we run this script with `/root/restore.sh /backup/backup.tar.gz /backup/grafana-data` and the backup file shows a dir structure like this `/backup/grafana-data/*`, we will end up with this `/backup/grafana-data/backup/grafana-data/*`. **This is definitely not what we want**.
+We should run the script with `/root/restore.sh /backup/backup.tar.gz /backup/grafana-data 2`, so we will end up with this `/backup/grafana-data/*`.
+
+Please, note that **full content of backup file will be extracted**, so if multiple volumes are being backed up simultaneously prepare the backup file to be restored in advance, deleting whatever you are not interested in.
 
 ## Configuration
 
