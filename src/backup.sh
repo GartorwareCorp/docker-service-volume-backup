@@ -36,7 +36,7 @@ if [ -S "$DOCKER_SOCK" ]; then
 else
   CONTAINERS_TO_STOP_TOTAL="0"
   CONTAINERS_TOTAL="0"
-  echo "Cannot access \"$DOCKER_SOCK\", won't look for containers to stop"
+  echo "Cannot access \"$DOCKER_SOCK\", won't look for containers or services to stop"
 fi
 
 if [ "$CONTAINERS_TO_STOP_TOTAL" != "0" ]; then
