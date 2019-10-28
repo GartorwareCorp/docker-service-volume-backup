@@ -260,6 +260,9 @@ Variable | Default | Notes
 `AWS_ACCESS_KEY_ID` |  | Required when using `AWS_S3_BUCKET_NAME`.
 `AWS_SECRET_ACCESS_KEY` |  | Required when using `AWS_S3_BUCKET_NAME`.
 `AWS_DEFAULT_REGION` |  | Optional when using `AWS_S3_BUCKET_NAME`. Allows you to override the AWS CLI default region. Usually not needed.
+`SMB_SHARE`|  | When provided, the resulting backup file will be uploaded to this SAMBA share after the backup has ran.
+`SMB_SECRET`| | Required when using `SMB_SHARE`. Name of the docker secret which contains SAMBA auth
+`SMB_UPLOAD_TIMEOUT` | 1800 | <seconds> Maximum time allowed for the transfer to SAMBA 
 `INFLUXDB_URL` |  | When provided, backup metrics will be sent to an InfluxDB instance at this URL, e.g. `https://influxdb.example.com`.
 `INFLUXDB_DB` |  | Required when using `INFLUXDB_URL`; e.g. `my_database`.
 `INFLUXDB_CREDENTIALS` |  | Required when using `INFLUXDB_URL`; e.g. `user:pass`.
