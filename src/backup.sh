@@ -119,7 +119,7 @@ if [ ! -z "$SMB_SHARE" ]; then
   echo "Will upload to smb share \"$SMB_SHARE\""
   TIME_SMB_UPLOAD="$(date +%s.%N)"
   # smbclient "//$SMB_SHARE -A "/run/secrets/$SMB_SECRET" -c "put $BACKUP_FILENAME"
-  curl --upload-file -m $SMB_UPLOAD_TIMEOUT "$BACKUP_FILENAME" -u "$(< /run/secrets/$SMB_SECRET)" "smb://$SMB_SHARE"
+  curl --upload-file "$BACKUP_FILENAME" -m $SMB_UPLOAD_TIMEOUT -u "$(< /run/secrets/$SMB_SECRET)" "smb://$SMB_SHARE"
   echo "Upload finished"
   TIME_SMB_UPLOADED="$(date +%s.%N)"
 fi
