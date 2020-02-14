@@ -231,6 +231,7 @@ To stop containers/services during the restore be sure to include the label `"do
 The restore procedure can be launched then with:
 `/root/restore.sh <path_to_backup_file> <target_path> [components_to_strip]`
 Where
+
 Argument | Default | Notes
 --- | --- | ---
 path_to_backup_file | - | Required
