@@ -1,5 +1,7 @@
 FROM ubuntu:18.04
 
+ENV TIMEZONE=Europe/Madrid
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
         curl cron awscli \
     && apt-get autoremove -y \

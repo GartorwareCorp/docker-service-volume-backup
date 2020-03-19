@@ -19,6 +19,7 @@ INFLUXDB_URL="${INFLUXDB_URL:-}"
 INFLUXDB_DB="${INFLUXDB_DB:-}"
 INFLUXDB_CREDENTIALS="${INFLUXDB_CREDENTIALS:-}"
 INFLUXDB_MEASUREMENT="${INFLUXDB_MEASUREMENT:-docker_volume_backup}"
+TIMEZONE="${TIMEZONE:-Europe/Madrid}"
 EOF
 chmod a+x env.sh
 source env.sh
@@ -40,6 +41,11 @@ fi
 # Add our cron entry, and direct stdout & stderr to Docker commands stdout
 echo "Installing cron.d entry: docker-volume-backup"
 echo "$BACKUP_CRON_EXPRESSION root /root/backup.sh > /proc/1/fd/1 2>&1" > /etc/cron.d/docker-volume-backup
+
+# Change timezone
+ln -snf /usr/share/zoneinfo/$TIMEZONE /etc/localtime \
+    && echo $TIMEZONE > /etc/timezone \
+    && dpkg-reconfigure --frontend noninteractive tzdata
 
 # Let cron take the wheel
 echo "Starting cron in foreground with expression: $BACKUP_CRON_EXPRESSION"

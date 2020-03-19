@@ -268,6 +268,7 @@ Variable | Default | Notes
 `INFLUXDB_DB` |  | Required when using `INFLUXDB_URL`; e.g. `my_database`.
 `INFLUXDB_CREDENTIALS` |  | Required when using `INFLUXDB_URL`; e.g. `user:pass`.
 `INFLUXDB_MEASUREMENT` | `docker_volume_backup` | Required when using `INFLUXDB_URL`.
+`TIMEZONE` | `Europe/Madrid` | Set the timezone.
 
 ## Metrics
 
