@@ -3,7 +3,7 @@ FROM ubuntu:18.04
 ENV TZ=Europe/Madrid
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        curl cron ca-certificates unzip \
+        curl cron ca-certificates unzip tzdata \
     && apt-get autoremove -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* 
