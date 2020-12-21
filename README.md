@@ -27,7 +27,7 @@ services:
       - grafana-data:/var/lib/grafana           # This is where Grafana keeps its data
 
   backup:
-    image: futurice/docker-volume-backup:2.0.0
+    image: futurice/docker-volume-backup
     volumes:
       - grafana-data:/backup/grafana-data:ro    # Mount the Grafana data volume (as read-only)
       - ./backups:/archive                      # Mount a local folder as the backup archive
@@ -53,7 +53,7 @@ services:
       - grafana-data:/var/lib/grafana           # This is where Grafana keeps its data
 
   backup:
-    image: futurice/docker-volume-backup:2.0.0
+    image: futurice/docker-volume-backup
     environment:
       AWS_S3_BUCKET_NAME: my-backup-bucket      # S3 bucket which you own, and already exists
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}   # Read AWS secrets from environment (or a .env file)
@@ -107,6 +107,34 @@ myWorkgroup\myUsername:myPassword
 ```
 This string must be passed through docker secrets, so the secret must already exist or be defined in the top-level secrets configuration of the stack file, or stack deployment fails.
 [See compose file reference](https://docs.docker.com/compose/compose-file/#secrets).
+
+### Triggering a backup manually
+
+Sometimes it's useful to trigger a backup manually, e.g. right before making some big changes.
+
+This is as simple as:
+
+```
+$ docker-compose exec backup ./backup.sh
+
+[INFO] Backup starting
+
+8 containers running on host in total
+1 containers marked to be stopped during backup
+
+...
+...
+...
+
+[INFO] Backup finished
+
+Will wait for next scheduled backup
+```
+
+If you **only** want to back up manually (i.e. not on a schedule), you should either:
+
+1. Run the image without `docker-compose`, override the image entrypoint to `/root/backup.sh`, and ensure you match your env-vars with what the default `src/entrypoint.sh` would normally set up for you, or
+1. Just use `BACKUP_CRON_EXPRESSION="#"` (to ensure scheduled backup never runs) and execute `docker-compose exec backup ./backup.sh` whenever you want to run a backup
 
 ### Stopping containers while backing up
 
@@ -264,11 +292,12 @@ Variable | Default | Notes
 `SMB_SHARE`|  | When provided, the resulting backup file will be uploaded to this SAMBA share after the backup has ran.
 `SMB_SECRET`| | Required when using `SMB_SHARE`. Name of the docker secret which contains SAMBA auth
 `SMB_UPLOAD_TIMEOUT` | 1800 | <seconds> Maximum time allowed for the transfer to SAMBA 
+`AWS_EXTRA_ARGS` |  | Optional additional args for the AWS CLI. Useful for e.g. providing `--endpoint-url <url>` for S3-interopable systems, such as DigitalOcean Storage.
 `INFLUXDB_URL` |  | When provided, backup metrics will be sent to an InfluxDB instance at this URL, e.g. `https://influxdb.example.com`.
 `INFLUXDB_DB` |  | Required when using `INFLUXDB_URL`; e.g. `my_database`.
 `INFLUXDB_CREDENTIALS` |  | Required when using `INFLUXDB_URL`; e.g. `user:pass`.
 `INFLUXDB_MEASUREMENT` | `docker_volume_backup` | Required when using `INFLUXDB_URL`.
-`TIMEZONE` | `Europe/Madrid` | Set the timezone.
+`TZ` | `UTC` | Which timezone should `cron` use, e.g. `America/New_York` or `Europe/Madrid`. See [full list of available time zones](http://manpages.ubuntu.com/manpages/bionic/man3/DateTime::TimeZone::Catalog.3pm.html).
 
 ## Metrics
 
@@ -290,7 +319,18 @@ If so configured, they can also be shipped to an InfluxDB instance. This allows 
 
 ![Backup dashboard sample](doc/backup-dashboard-sample.png)
 
-## S3 Bucket setup
+## Automatic backup rotation
+
+You probably don't want to keep all backups forever. A more common strategy is to hold onto a few recent ones, and remove older ones as they become irrelevant. There's no built-in support for this in `docker-volume-backup`, but it's simple enough to set up externally.
+
+### Rotation for local backups
+
+Check out these utilities, for example:
+
+* https://rotate-backups.readthedocs.io/en/latest/
+* https://github.com/xolox/python-rotate-backups
+
+### Rotation for S3 backups
 
 Amazon S3 has [Versioning](https://docs.aws.amazon.com/AmazonS3/latest/dev/Versioning.html) and [Object Lifecycle Management](https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lifecycle-mgmt.html) features that can be useful for backups.
 
@@ -334,3 +374,10 @@ Some cases may need secrets available in the environment, e.g. for S3 uploads to
 New images can be conveniently built on [Docker Hub](https://hub.docker.com/r/futurice/docker-volume-backup/~/settings/automated-builds/). Update the tag name, save, and use the "Trigger" button:
 
 ![Docker Hub build](doc/docker-hub-build.png)
+
+If this won't work, local build & push should:
+
+```
+docker build -t futurice/docker-volume-backup:2.1.0 .
+docker push futurice/docker-volume-backup:2.1.0
+```

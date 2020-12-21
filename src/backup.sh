@@ -12,10 +12,15 @@ function info {
 info "Backup starting"
 TIME_START="$(date +%s.%N)"
 DOCKER_SOCK="/var/run/docker.sock"
+
+if [ ! -z "$BACKUP_CUSTOM_LABEL" ]; then
+    CUSTOM_LABEL="--filter label=$BACKUP_CUSTOM_LABEL"
+fi
+
 if [ -S "$DOCKER_SOCK" ]; then
   # Containers to stop
   TEMPFILE="$(mktemp)"
-  docker ps --format "{{.ID}}" --filter "label=docker-volume-backup.stop-during-backup=true" > "$TEMPFILE"
+  docker ps --format "{{.ID}}" --filter "label=docker-volume-backup.stop-during-backup=true" $CUSTOM_LABEL > "$TEMPFILE"
   CONTAINERS_TO_STOP="$(cat $TEMPFILE | tr '\n' ' ')"
   CONTAINERS_TO_STOP_TOTAL="$(cat $TEMPFILE | wc -l)"
   CONTAINERS_TOTAL="$(docker ps --format "{{.ID}}" | wc -l)"
@@ -25,7 +30,7 @@ if [ -S "$DOCKER_SOCK" ]; then
 
   # Services to stop
   TEMPFILE="$(mktemp)"
-  docker service ls --format "{{.ID}} {{.Replicas}}" --filter "label=docker-volume-backup.stop-during-backup=true" | grep -v "/0$" | awk -F'[ ]' '{ print $1 }' > "$TEMPFILE"
+  docker service ls --format "{{.ID}} {{.Replicas}}" --filter "label=docker-volume-backup.stop-during-backup=true" $CUSTOM_LABEL | grep -v "/0$" | awk -F'[ ]' '{ print $1 }' > "$TEMPFILE"
   SERVICES_TO_STOP="$(cat $TEMPFILE | tr '\n' ' ')"
   SERVICES_TO_STOP_TOTAL="$(cat $TEMPFILE | wc -l)"
   SERVICES_TOTAL="$(docker service ls --format "{{.ID}}" | wc -l)"
@@ -55,7 +60,7 @@ fi
 if [ -S "$DOCKER_SOCK" ]; then
   TEMPFILE="$(mktemp)"
   docker ps \
-    --filter "label=docker-volume-backup.exec-pre-backup" \
+    --filter "label=docker-volume-backup.exec-pre-backup" $CUSTOM_LABEL \
     --format '{{.ID}} {{.Label "docker-volume-backup.exec-pre-backup"}}' \
     > "$TEMPFILE"
   while read line; do
@@ -74,7 +79,7 @@ TIME_BACKED_UP="$(date +%s.%N)"
 if [ -S "$DOCKER_SOCK" ]; then
   TEMPFILE="$(mktemp)"
   docker ps \
-    --filter "label=docker-volume-backup.exec-post-backup" \
+    --filter "label=docker-volume-backup.exec-post-backup" $CUSTOM_LABEL \
     --format '{{.ID}} {{.Label "docker-volume-backup.exec-post-backup"}}' \
     > "$TEMPFILE"
   while read line; do
@@ -107,7 +112,7 @@ if [ ! -z "$AWS_S3_BUCKET_NAME" ]; then
   info "Uploading backup to S3"
   echo "Will upload to bucket \"$AWS_S3_BUCKET_NAME\""
   TIME_UPLOAD="$(date +%s.%N)"
-  aws s3 cp --only-show-errors "$BACKUP_FILENAME" "s3://$AWS_S3_BUCKET_NAME/"
+  aws $AWS_EXTRA_ARGS s3 cp --only-show-errors "$BACKUP_FILENAME" "s3://$AWS_S3_BUCKET_NAME/"
   echo "Upload finished"
   TIME_UPLOADED="$(date +%s.%N)"
 fi
