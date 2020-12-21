@@ -1,12 +1,19 @@
 FROM ubuntu:18.04
 
-ENV TIMEZONE=Europe/Madrid
+ENV TZ=Europe/Madrid
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        curl cron awscli \
+        curl cron ca-certificates unzip \
     && apt-get autoremove -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* 
+
+# Install awscliv2 https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2-linux.html
+RUN curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+RUN unzip -q awscliv2.zip
+RUN ./aws/install -i /usr/bin -b /usr/bin
+RUN rm -rf ./aws awscliv2.zip
+RUN aws --version
 
 # https://docs.docker.com/engine/installation/linux/docker-ce/ubuntu/#install-using-the-convenience-script
 RUN curl -fsSL get.docker.com -o get-docker.sh \
