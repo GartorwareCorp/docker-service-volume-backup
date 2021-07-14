@@ -9,6 +9,7 @@ Docker image for performing simple backups of Docker volumes. Main features:
 - Optionally `docker exec`s commands before/after backing up a container, to allow easy integration with database backup tools, for example
 - Optionally ships backup metrics to [InfluxDB](https://docs.influxdata.com/influxdb/), for monitoring
 - A restoration script is available as well.
+- Optionally encrypts backups with `gpg` before uploading
 
 ## Examples
 
@@ -20,17 +21,16 @@ Say you're running some dashboards with [Grafana](https://grafana.com/) and want
 version: "3"
 
 services:
-
   dashboard:
-    image: grafana/grafana:5.3.4
+    image: grafana/grafana:7.4.5
     volumes:
-      - grafana-data:/var/lib/grafana           # This is where Grafana keeps its data
+      - grafana-data:/var/lib/grafana # This is where Grafana keeps its data
 
   backup:
     image: futurice/docker-volume-backup
     volumes:
-      - grafana-data:/backup/grafana-data:ro    # Mount the Grafana data volume (as read-only)
-      - ./backups:/archive                      # Mount a local folder as the backup archive
+      - grafana-data:/backup/grafana-data:ro # Mount the Grafana data volume (as read-only)
+      - ./backups:/archive # Mount a local folder as the backup archive
 
 volumes:
   grafana-data:
@@ -46,20 +46,19 @@ Off-site backups are better, though:
 version: "3"
 
 services:
-
   dashboard:
-    image: grafana/grafana:5.3.4
+    image: grafana/grafana:7.4.5
     volumes:
-      - grafana-data:/var/lib/grafana           # This is where Grafana keeps its data
+      - grafana-data:/var/lib/grafana # This is where Grafana keeps its data
 
   backup:
     image: futurice/docker-volume-backup
     environment:
-      AWS_S3_BUCKET_NAME: my-backup-bucket      # S3 bucket which you own, and already exists
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}   # Read AWS secrets from environment (or a .env file)
+      AWS_S3_BUCKET_NAME: my-backup-bucket # S3 bucket which you own, and already exists
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID} # Read AWS secrets from environment (or a .env file)
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
     volumes:
-      - grafana-data:/backup/grafana-data:ro    # Mount the Grafana data volume (as read-only)
+      - grafana-data:/backup/grafana-data:ro # Mount the Grafana data volume (as read-only)
 
 volumes:
   grafana-data:
@@ -75,11 +74,10 @@ Off-site backups are better, though:
 version: "3.7"
 
 services:
-
   dashboard:
     image: grafana/grafana:5.3.4
     volumes:
-      - grafana-data:/var/lib/grafana           # This is where Grafana keeps its data
+      - grafana-data:/var/lib/grafana # This is where Grafana keeps its data
 
   backup:
     image: futurice/docker-volume-backup:2.0.0
@@ -89,7 +87,7 @@ services:
     secrets:
       - smb_secret
     volumes:
-      - grafana-data:/backup/grafana-data:ro    # Mount the Grafana data volume (as read-only)
+      - grafana-data:/backup/grafana-data:ro # Mount the Grafana data volume (as read-only)
 
 volumes:
   grafana-data:
@@ -99,14 +97,38 @@ secrets:
     external: true
 ```
 
-This configuration will back up to a SAMBA share instead. 
-Do not forget the trailing slash in SMB_SHARE env.
-The authentication is done via _curl -u_ , so a proper user and password string is required:
+This configuration will back up to a SAMBA share instead.
+Do not forget the trailing slash in SMB*SHARE env.
+The authentication is done via \_curl -u* , so a proper user and password string is required:
+
 ```
 myWorkgroup\myUsername:myPassword
 ```
+
 This string must be passed through docker secrets, so the secret must already exist or be defined in the top-level secrets configuration of the stack file, or stack deployment fails.
 [See compose file reference](https://docs.docker.com/compose/compose-file/#secrets).
+
+### Restoring from S3
+
+Downloading backups from S3 can be done however you usually interact with S3, e.g. via the `aws s3` CLI or the AWS Web Console.
+
+However, if you're on the host that's running this image, you can also download the latest backup with:
+
+```
+$ docker-compose exec -T backup bash -c 'aws s3 cp s3://$AWS_S3_BUCKET_NAME/$BACKUP_FILENAME -' > restore.tar.gz
+```
+
+From here on out the restore process will depend on a variety of things, like whether you've encrypted the backups, how your volumes are configured, and what application it is exactly that you're restoring.
+
+But for the sake of example, to finish the restore for the above Grafana setup, you would:
+
+1. Extract the contents of the backup, with e.g. `tar -xf restore.tar.gz`. This would leave you with a new directory called `backup` in the current dir.
+1. Figure out the mount point of the `grafana-data` volume, with e.g. `docker volume ls` and then `docker volume inspect`. Let's say it ends up being `/var/lib/docker/volumes/bla-bla/_data`. This is where your live Grafana keeps its data on the host file system.
+1. Stop Grafana, with `docker-compose stop dashboard`.
+1. Move any existing data aside, with e.g. `sudo mv /var/lib/docker/volumes/bla-bla/_data{,_replaced_during_restore}`. You can also just remove it, if you like to live dangerously.
+1. Move the backed up data to where the live Grafana can find it, with e.g. `sudo cp -r backup/grafana-data /var/lib/docker/volumes/bla-bla/_data`.
+1. Depending on the Grafana version, [you may need to set some permissions manually](http://docs.grafana.org/installation/docker/#migration-from-a-previous-version-of-the-docker-container-to-5-1-or-later), e.g. `sudo chown -R 472:472 /var/lib/docker/volumes/bla-bla/_data`.
+1. Start Grafana back up, with `docker-compose start dashboard`. Your Grafana instance should now have travelled back in time to its latest backup.
 
 ### Triggering a backup manually
 
@@ -140,7 +162,6 @@ If you **only** want to back up manually (i.e. not on a schedule), you should ei
 
 It's not generally safe to read files to which other processes might be writing. You may end up with corrupted copies.
 
-
 You can use the label `"docker-volume-backup.stop-during-backup=true"` to stop containers and/or services during backup.
 
 If you are running **docker-compose or plain docker (not swarm)**, you can give the backup container access to the Docker socket, and label any containers that need to be stopped while the backup runs:
@@ -149,11 +170,10 @@ If you are running **docker-compose or plain docker (not swarm)**, you can give 
 version: "3"
 
 services:
-
   dashboard:
-    image: grafana/grafana:5.3.4
+    image: grafana/grafana:7.4.5
     volumes:
-      - grafana-data:/var/lib/grafana           # This is where Grafana keeps its data
+      - grafana-data:/var/lib/grafana # This is where Grafana keeps its data
     labels:
       # Adding this label means this container should be stopped while it's being backed up:
       - "docker-volume-backup.stop-during-backup=true"
@@ -161,12 +181,12 @@ services:
   backup:
     image: futurice/docker-volume-backup:2.0.0
     environment:
-      AWS_S3_BUCKET_NAME: my-backup-bucket      # S3 bucket which you own, and already exists
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}   # Read AWS secrets from environment (or a .env file)
+      AWS_S3_BUCKET_NAME: my-backup-bucket # S3 bucket which you own, and already exists
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID} # Read AWS secrets from environment (or a .env file)
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro # Allow use of the "stop-during-backup" feature
-      - grafana-data:/backup/grafana-data:ro    # Mount the Grafana data volume (as read-only)
+      - grafana-data:/backup/grafana-data:ro # Mount the Grafana data volume (as read-only)
 
 volumes:
   grafana-data:
@@ -178,11 +198,10 @@ If you are running **docker stack or docker swarm**, you can give the backup con
 version: "3"
 
 services:
-
   dashboard-as-service:
     image: grafana/grafana:5.3.4
     volumes:
-      - grafana-data:/var/lib/grafana           # This is where Grafana keeps its data
+      - grafana-data:/var/lib/grafana # This is where Grafana keeps its data
     deploy:
       mode: replicated
       replicas: 1
@@ -195,12 +214,12 @@ services:
   backup:
     image: futurice/docker-volume-backup:2.0.0
     environment:
-      AWS_S3_BUCKET_NAME: my-backup-bucket      # S3 bucket which you own, and already exists
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}   # Read AWS secrets from environment (or a .env file)
+      AWS_S3_BUCKET_NAME: my-backup-bucket # S3 bucket which you own, and already exists
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID} # Read AWS secrets from environment (or a .env file)
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro # Allow use of the "stop-during-backup" feature
-      - grafana-data:/backup/grafana-data:ro    # Mount the Grafana data volume (as read-only)
+      - grafana-data:/backup/grafana-data:ro # Mount the Grafana data volume (as read-only)
 
 volumes:
   grafana-data:
@@ -217,12 +236,11 @@ If you don't want to stop the container while it's being backed up, and the cont
 version: "3"
 
 services:
-
   database:
     image: influxdb:1.5.4
     volumes:
-      - influxdb-data:/var/lib/influxdb         # This is where InfluxDB keeps its data
-      - influxdb-temp:/tmp/influxdb             # This is our temp space for the backup
+      - influxdb-data:/var/lib/influxdb # This is where InfluxDB keeps its data
+      - influxdb-temp:/tmp/influxdb # This is our temp space for the backup
     labels:
       # These commands will be exec'd (in the same container) before/after the backup starts:
       - docker-volume-backup.exec-pre-backup=influxd backup -portable /tmp/influxdb
@@ -232,8 +250,8 @@ services:
     image: futurice/docker-volume-backup:2.0.0
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro # Allow use of the "pre/post exec" feature
-      - influxdb-temp:/backup/influxdb:ro       # Mount the temp space so it gets backed up
-      - ./backups:/archive                      # Mount a local folder as the backup archive
+      - influxdb-temp:/backup/influxdb:ro # Mount the temp space so it gets backed up
+      - ./backups:/archive # Mount a local folder as the backup archive
 
 volumes:
   influxdb-data:
@@ -250,25 +268,25 @@ If you need a more complex script for pre/post exec, consider mounting and invok
 
 ### Restoring a backup
 
-This is a manual procedure. 
+This is a manual procedure.
 
 First step is to have a backup file available. So if a backup file is not available locally (ie, `$BACKUP_ARCHIVE` is not a volume) you may need to user a `docker cp command` to upload the file to the container.
 
-To stop containers/services during the restore be sure to include the label `"docker-volume-backup.stop-during-restore=true"` to containers and/or services. This label is similar to the `docker-volume-backup.stop-during-backup` (note the last word) and surely you want to include both of them at once. 
+To stop containers/services during the restore be sure to include the label `"docker-volume-backup.stop-during-restore=true"` to containers and/or services. This label is similar to the `docker-volume-backup.stop-during-backup` (note the last word) and surely you want to include both of them at once.
 
 The restore procedure can be launched then with:
 `/root/restore.sh <path_to_backup_file> <target_path> [components_to_strip]`
 Where
 
-Argument | Default | Notes
---- | --- | ---
-path_to_backup_file | - | Required
-target_path | - | Required. **DO NOT INCLUDE A TRAILING SLASH**
-components_to_strip | 0 | Number of directories to strip from the backup file
+| Argument            | Default | Notes                                               |
+| ------------------- | ------- | --------------------------------------------------- |
+| path_to_backup_file | -       | Required                                            |
+| target_path         | -       | Required. **DO NOT INCLUDE A TRAILING SLASH**       |
+| components_to_strip | 0       | Number of directories to strip from the backup file |
 
 Use absolute paths to avoid mess.
 
-This script will untar the backup file into `target_path` **stripping** the firsts _components_to_strip_ directories. 
+This script will untar the backup file into `target_path` **stripping** the firsts _components_to_strip_ directories.
 
 For example, if we run this script with `/root/restore.sh /backup/backup.tar.gz /backup/grafana-data` and the backup file shows a dir structure like this `/backup/grafana-data/*`, we will end up with this `/backup/grafana-data/backup/grafana-data/*`. **This is definitely not what we want**.
 We should run the script with `/root/restore.sh /backup/backup.tar.gz /backup/grafana-data 2`, so we will end up with this `/backup/grafana-data/*`.
@@ -277,27 +295,32 @@ Please, note that **full content of backup file will be extracted**, so if multi
 
 ## Configuration
 
-Variable | Default | Notes
---- | --- | ---
-`BACKUP_SOURCES` | `/backup` | Where to read data from. This can be a space-separated list if you need to back up multiple paths, when mounting multiple volumes for example. On the other hand, you can also just mount multiple volumes under `/backup` to have all of them backed up.
-`BACKUP_CRON_EXPRESSION` | `@daily` | Standard debian-flavored `cron` expression for when the backup should run. Use e.g. `0 4 * * *` to back up at 4 AM every night. See the [man page](http://man7.org/linux/man-pages/man8/cron.8.html) or [crontab.guru](https://crontab.guru/) for more.
-`BACKUP_FILENAME` | `backup-%Y-%m-%dT%H-%M-%S.tar.gz` | File name template for the backup file. Is passed through `date` for formatting. See the [man page](http://man7.org/linux/man-pages/man1/date.1.html) for more.
-`BACKUP_ARCHIVE` | `/archive` | When this path is available within the container (i.e. you've mounted a Docker volume there), a finished backup file will get archived there after each run.
-`BACKUP_WAIT_SECONDS` | `0` | The backup script will sleep this many seconds between re-starting stopped containers, and proceeding with archiving/uploading the backup. This can be useful if you don't want the load/network spike of a large upload immediately after the load/network spike of container startup.
-`BACKUP_HOSTNAME` | `$(hostname)` | Name of the host (i.e. Docker container) in which the backup runs. Mostly useful if you want a specific hostname to be associated with backup metrics (see InfluxDB support).
-`AWS_S3_BUCKET_NAME` |  | When provided, the resulting backup file will be uploaded to this S3 bucket after the backup has ran.
-`AWS_ACCESS_KEY_ID` |  | Required when using `AWS_S3_BUCKET_NAME`.
-`AWS_SECRET_ACCESS_KEY` |  | Required when using `AWS_S3_BUCKET_NAME`.
-`AWS_DEFAULT_REGION` |  | Optional when using `AWS_S3_BUCKET_NAME`. Allows you to override the AWS CLI default region. Usually not needed.
-`SMB_SHARE`|  | When provided, the resulting backup file will be uploaded to this SAMBA share after the backup has ran.
-`SMB_SECRET`| | Required when using `SMB_SHARE`. Name of the docker secret which contains SAMBA auth
-`SMB_UPLOAD_TIMEOUT` | 1800 | <seconds> Maximum time allowed for the transfer to SAMBA 
-`AWS_EXTRA_ARGS` |  | Optional additional args for the AWS CLI. Useful for e.g. providing `--endpoint-url <url>` for S3-interopable systems, such as DigitalOcean Storage.
-`INFLUXDB_URL` |  | When provided, backup metrics will be sent to an InfluxDB instance at this URL, e.g. `https://influxdb.example.com`.
-`INFLUXDB_DB` |  | Required when using `INFLUXDB_URL`; e.g. `my_database`.
-`INFLUXDB_CREDENTIALS` |  | Required when using `INFLUXDB_URL`; e.g. `user:pass`.
-`INFLUXDB_MEASUREMENT` | `docker_volume_backup` | Required when using `INFLUXDB_URL`.
-`TZ` | `UTC` | Which timezone should `cron` use, e.g. `America/New_York` or `Europe/Madrid`. See [full list of available time zones](http://manpages.ubuntu.com/manpages/bionic/man3/DateTime::TimeZone::Catalog.3pm.html).
+| Variable                 | Default                           | Notes                                                                                                                                                                                                                                                                                   |
+| ------------------------ | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BACKUP_SOURCES`         | `/backup`                         | Where to read data from. This can be a space-separated list if you need to back up multiple paths, when mounting multiple volumes for example. On the other hand, you can also just mount multiple volumes under `/backup` to have all of them backed up.                               |
+| `BACKUP_CRON_EXPRESSION` | `@daily`                          | Standard debian-flavored `cron` expression for when the backup should run. Use e.g. `0 4 * * *` to back up at 4 AM every night. See the [man page](http://man7.org/linux/man-pages/man8/cron.8.html) or [crontab.guru](https://crontab.guru/) for more.                                 |
+| `BACKUP_FILENAME`        | `backup-%Y-%m-%dT%H-%M-%S.tar.gz` | File name template for the backup file. Is passed through `date` for formatting. See the [man page](http://man7.org/linux/man-pages/man1/date.1.html) for more.                                                                                                                         |
+| `BACKUP_ARCHIVE`         | `/archive`                        | When this path is available within the container (i.e. you've mounted a Docker volume there), a finished backup file will get archived there after each run.                                                                                                                            |
+| `BACKUP_UID`             | `root (0)`                        | After backup file has been moved to archive location the file user ownership is changed to this UID.                                                                                                                                                                                    |
+| `BACKUP_GID`             | `$BACKUP_UID`                     | After backup file has been moved to archive location the file group ownership is changed to this GID.                                                                                                                                                                                   |
+| `BACKUP_WAIT_SECONDS`    | `0`                               | The backup script will sleep this many seconds between re-starting stopped containers, and proceeding with archiving/uploading the backup. This can be useful if you don't want the load/network spike of a large upload immediately after the load/network spike of container startup. |
+| `BACKUP_HOSTNAME`        | `$(hostname)`                     | Name of the host (i.e. Docker container) in which the backup runs. Mostly useful if you want a specific hostname to be associated with backup metrics (see InfluxDB support).                                                                                                           |
+| `BACKUP_CUSTOM_LABEL`    |                                   | When provided, the [start/stop](#stopping-containers-while-backing-up) and [pre/post exec](#prepost-backup-exec) logic only applies to containers with this custom label.                                                                                                               |
+| `AWS_S3_BUCKET_NAME`     |                                   | When provided, the resulting backup file will be uploaded to this S3 bucket after the backup has ran.                                                                                                                                                                                   |
+| `AWS_GLACIER_VAULT_NAME` |                                   | When provided, the resulting backup file will be uploaded to this AWS Glacier vault after the backup has ran.                                                                                                                                                                           |
+| `AWS_ACCESS_KEY_ID`      |                                   | Required when using `AWS_S3_BUCKET_NAME`.                                                                                                                                                                                                                                               |
+| `AWS_SECRET_ACCESS_KEY`  |                                   | Required when using `AWS_S3_BUCKET_NAME`.                                                                                                                                                                                                                                               |
+| `AWS_DEFAULT_REGION`     |                                   | Optional when using `AWS_S3_BUCKET_NAME`. Allows you to override the AWS CLI default region. Usually not needed.                                                                                                                                                                        |
+| `SMB_SHARE`              |                                   | When provided, the resulting backup file will be uploaded to this SAMBA share after the backup has ran.                                                                                                                                                                                 |
+| `SMB_SECRET`             |                                   | Required when using `SMB_SHARE`. Name of the docker secret which contains SAMBA auth                                                                                                                                                                                                    |
+| `SMB_UPLOAD_TIMEOUT`     | 1800                              | <seconds> Maximum time allowed for the transfer to SAMBA                                                                                                                                                                                                                                |
+| `AWS_EXTRA_ARGS`         |                                   | Optional additional args for the AWS CLI. Useful for e.g. providing `--endpoint-url <url>` for S3-interopable systems, such as DigitalOcean Storage.                                                                                                                                    |
+| `GPG_PASSPHRASE`         |                                   | When provided, the backup will be encrypted with gpg using this `passphrase`.                                                                                                                                                                                                           |
+| `INFLUXDB_URL`           |                                   | When provided, backup metrics will be sent to an InfluxDB instance at this URL, e.g. `https://influxdb.example.com`.                                                                                                                                                                    |
+| `INFLUXDB_DB`            |                                   | Required when using `INFLUXDB_URL`; e.g. `my_database`.                                                                                                                                                                                                                                 |
+| `INFLUXDB_CREDENTIALS`   |                                   | Required when using `INFLUXDB_URL`; e.g. `user:pass`.                                                                                                                                                                                                                                   |
+| `INFLUXDB_MEASUREMENT`   | `docker_volume_backup`            | Required when using `INFLUXDB_URL`.                                                                                                                                                                                                                                                     |
+| `TZ`                     | `UTC`                             | Which timezone should `cron` use, e.g. `America/New_York` or `Europe/Madrid`. See [full list of available time zones](http://manpages.ubuntu.com/manpages/bionic/man3/DateTime::TimeZone::Catalog.3pm.html).                                                                            |
 
 ## Metrics
 
@@ -327,8 +350,8 @@ You probably don't want to keep all backups forever. A more common strategy is t
 
 Check out these utilities, for example:
 
-* https://rotate-backups.readthedocs.io/en/latest/
-* https://github.com/xolox/python-rotate-backups
+- https://rotate-backups.readthedocs.io/en/latest/
+- https://github.com/xolox/python-rotate-backups
 
 ### Rotation for S3 backups
 

@@ -14,7 +14,7 @@ TIME_START="$(date +%s.%N)"
 DOCKER_SOCK="/var/run/docker.sock"
 
 if [ ! -z "$BACKUP_CUSTOM_LABEL" ]; then
-    CUSTOM_LABEL="--filter label=$BACKUP_CUSTOM_LABEL"
+  CUSTOM_LABEL="--filter label=$BACKUP_CUSTOM_LABEL"
 fi
 
 if [ -S "$DOCKER_SOCK" ]; then
@@ -76,6 +76,13 @@ tar -czvf "$BACKUP_FILENAME" $BACKUP_SOURCES # allow the var to expand, in case 
 BACKUP_SIZE="$(du --bytes $BACKUP_FILENAME | sed 's/\s.*$//')"
 TIME_BACKED_UP="$(date +%s.%N)"
 
+if [ ! -z "$GPG_PASSPHRASE" ]; then
+  info "Encrypting backup"
+  gpg --symmetric --cipher-algo aes256 --batch --passphrase "$GPG_PASSPHRASE" -o "${BACKUP_FILENAME}.gpg" $BACKUP_FILENAME
+  rm $BACKUP_FILENAME
+  BACKUP_FILENAME="${BACKUP_FILENAME}.gpg"
+fi
+
 if [ -S "$DOCKER_SOCK" ]; then
   TEMPFILE="$(mktemp)"
   docker ps \
@@ -116,6 +123,14 @@ if [ ! -z "$AWS_S3_BUCKET_NAME" ]; then
   echo "Upload finished"
   TIME_UPLOADED="$(date +%s.%N)"
 fi
+if [ ! -z "$AWS_GLACIER_VAULT_NAME" ]; then
+  info "Uploading backup to GLACIER"
+  echo "Will upload to vault \"$AWS_GLACIER_VAULT_NAME\""
+  TIME_UPLOAD="$(date +%s.%N)"
+  aws $AWS_EXTRA_ARGS glacier upload-archive --account-id - --vault-name "$AWS_GLACIER_VAULT_NAME" --body "$BACKUP_FILENAME"
+  echo "Upload finished"
+  TIME_UPLOADED="$(date +%s.%N)"
+fi
 
 TIME_SMB_UPLOAD="0"
 TIME_SMB_UPLOADED="0"
@@ -132,6 +147,9 @@ fi
 if [ -d "$BACKUP_ARCHIVE" ]; then
   info "Archiving backup"
   mv -v "$BACKUP_FILENAME" "$BACKUP_ARCHIVE/$BACKUP_FILENAME"
+  if (($BACKUP_UID > 0)); then
+    chown -v $BACKUP_UID:$BACKUP_GID "$BACKUP_ARCHIVE/$BACKUP_FILENAME"
+  fi
 fi
 
 if [ -f "$BACKUP_FILENAME" ]; then
