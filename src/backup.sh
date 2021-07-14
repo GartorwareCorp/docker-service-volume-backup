@@ -30,7 +30,7 @@ if [ -S "$DOCKER_SOCK" ]; then
 
   # Services to stop
   TEMPFILE="$(mktemp)"
-  docker service ls --format "{{.ID}} {{.Replicas}}" --filter "label=docker-volume-backup.stop-during-backup=true" $CUSTOM_LABEL | grep -v "/0$" | awk -F'[ ]' '{ print $1 }' > "$TEMPFILE"
+  docker service ls --format "{{.ID}} {{.Replicas}}" --filter "label=docker-volume-backup.stop-during-backup=true" $CUSTOM_LABEL | grep -vE "0/[0-9]{1,2}$" | awk -F'[ ]' '{ print $1 }' > "$TEMPFILE"
   SERVICES_TO_STOP="$(cat $TEMPFILE | tr '\n' ' ')"
   SERVICES_TO_STOP_TOTAL="$(cat $TEMPFILE | wc -l)"
   SERVICES_TOTAL="$(docker service ls --format "{{.ID}}" | wc -l)"
